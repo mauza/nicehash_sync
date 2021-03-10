@@ -1,13 +1,16 @@
-import binascii
 import hmac
 import hashlib
+import logging
 import os
 import time
 import requests
 import secrets
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://api2.nicehash.com"
 ENCODING = "ISO-8859-1"
@@ -39,12 +42,11 @@ def hmac_sig(api_key, api_secret, epoch_ms, nonce, org_id, method, path, query, 
     if body:
         input_list.append(body.encode(ENCODING))
     hash_input = b'\0'.join(input_list)
-    print(str(hash_input))
     result = hmac.new(byte_key, hash_input, digestmod=hashlib.sha256).hexdigest()
     return result
 
 
-def gen_headers(timestamp_ms, nonce, org_id, request_id, api_key, hmac_signiture):
+def create_headers(timestamp_ms, nonce, org_id, request_id, api_key, hmac_signiture):
     result = {
         "X-Time": timestamp_ms,
         "X-Nonce": nonce,
@@ -55,28 +57,26 @@ def gen_headers(timestamp_ms, nonce, org_id, request_id, api_key, hmac_signiture
     return result
 
 
-def main():
-    config = get_config_from_env()
+def make_request(path, query, method, api_key, api_secret, org_id, body=None, **kwargs):
     epoch_ms = str(int(time.time()*1000))  # ms since epoch
     nonce = secrets.token_hex(18)
+    hmac_result = hmac_sig(api_key, api_secret, epoch_ms, nonce, org_id, method.upper(), path, query, body)
+    request_id = secrets.token_hex(11)
+    LOGGER.info(f"Sending {path}?{query} '{method}' request with id: {request_id}")
+    headers = create_headers(epoch_ms, nonce, org_id, request_id, api_key, hmac_result)
+    method = getattr(requests, method.lower())
+    url = f"{BASE_URL}{path}?{query}"
+    response = method(url, headers=headers, **kwargs)
+    return response.json()
+
+def main():
+    config = get_config_from_env()
     method = "GET"
     path = f"/main/api/v2/mining/external/{config['btc_address']}/rigs2"
     query = f"btcAddress={config['btc_address']}"
     body = ""
-    hmac_result = hmac_sig(
-        config["api_key"], config["api_secret_key"],
-        epoch_ms, nonce, config["org_id"], method, path, query
-    )
-    print(hmac_result)
-    request_id = nonce
-    headers = gen_headers(epoch_ms, nonce, config["org_id"], request_id, config["api_key"], hmac_result)
-    print(headers)
-    url = f"{BASE_URL}{path}?{query}"
-    print(url)
-    response = requests.get(url, headers=headers)
-    print(response.status_code)
-    print(response.content)
-
+    result = make_request(path, query, method, config["api_key"], config["api_secret_key"], config["org_id"], body=body)
+    print(result)
 
 
 if __name__ == "__main__":
