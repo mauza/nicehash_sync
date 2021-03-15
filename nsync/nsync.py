@@ -9,7 +9,7 @@ import sys
 from dotenv import load_dotenv
 
 load_dotenv()
-logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
+logging.basicConfig(stream=sys.stdout, level=logging.INFO)
 LOGGER = logging.getLogger(__name__)
 
 BASE_URL = "https://api2.nicehash.com"
@@ -69,13 +69,19 @@ def make_request(path, query, method, api_key, api_secret, org_id, body=None, **
     response = method(url, headers=headers, **kwargs)
     return response.json()
 
+def rigs_stats_unpaid(
+        key, secret, org_id, btc_address,
+        after_timestamp=int(time.time()*1000)-86400000,
+        before_timestamp=int(time.time()*1000)
+):
+    path = f"/main/api/v2/mining/external/{btc_address}/rigs/stats/unpaid"
+    query = f"btcAddress={btc_address}&afterTimestamp={after_timestamp}&beforeTimestamp={before_timestamp}"
+    result = make_request(path, query, "GET", key, secret, org_id)
+    return result
+
 def main():
     config = get_config_from_env()
-    method = "GET"
-    path = f"/main/api/v2/mining/external/{config['btc_address']}/rigs2"
-    query = f"btcAddress={config['btc_address']}"
-    body = ""
-    result = make_request(path, query, method, config["api_key"], config["api_secret_key"], config["org_id"], body=body)
+    result = rigs_stats_unpaid(config["api_key"], config["api_secret_key"], config["org_id"], config["btc_address"])
     print(result)
 
 
